@@ -1,0 +1,58 @@
+import tensorflow as tf
+# Import the necessary libraries
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.layers import Input, Embedding, Dense, GlobalAveragePooling1D
+from tensorflow.keras.layers import Dropout, LayerNormalization, MultiHeadAttention
+from tensorflow.keras.models import Modeltenate
+from tensorflow.keras.models import Model
+
+# Load the IMDb movie review dataset
+imdb = tf.keras.datasets.imdb
+(x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=10000)
+
+# Preprocess the input data
+max_len = 128
+x_train = pad_sequences(x_train, maxlen=max_len, padding='post', truncating='post')
+x_test = pad_sequences(x_test, maxlen=max_len, padding='post', truncating='post')
+
+# Define the transformer block
+def transformer_block(inputs, num_heads, ff_dim, dropout_rate):
+    # Multi-Head Attention layer
+    attention = MultiHeadAttention(num_heads=num_heads, key_dim=64)(inputs, inputs)
+    attention = Dropout(dropout_rate)(attention)
+    attention = LayerNormalization(epsilon=1e-6)(attention + inputs)
+
+    # Feedforward layer
+    outputs = Dense(ff_dim, activation='relu')(attention)
+    outputs = Dense(inputs.shape[-1])(outputs)
+    outputs = Dropout(dropout_rate)(outputs)
+    outputs = LayerNormalization(epsilon=1e-6)(outputs + attention)
+    return outputs
+
+# Define the neural network architecture
+inputs = Input(shape=(max_len,))
+x = Embedding(input_dim=10000, output_dim=128)(inputs)
+x = transformer_block(x, num_heads=8, ff_dim=128, dropout_rate=0.1)
+x = transformer_block(x, num_heads=8, ff_dim=128, dropout_rate=0.1)
+x = transformer_block(x, num_heads=8, ff_dim=128, dropout_rate=0.1)
+x = transformer_block(x, num_heads=8, ff_dim=128, dropout_rate=0.1)
+x = GlobalAveragePooling1D()(x)
+outputs = Dense(1, activation='sigmoid')(x)
+model = Model(inputs=inputs, outputs=outputs)
+
+# Compile the model
+model.compile(loss='binary_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy'])
+
+# Train the model
+model.fit(x_train, y_train,
+          batch_size=64,
+          epochs=5,
+          validation_data=(x_test, y_test))
+
+# Evaluate the model on the test set
+score = model.evaluate(x_test, y_test, verbose=0)
+print('Test loss:', score[0])
+print('Test accuracy:', score[1])
